@@ -84,23 +84,24 @@ export async function buscarPorCodigoBarras(codigo: string): Promise<Alimento | 
 
 export class BusquedaError extends Error {}
 
+const SEARCH_URL = 'https://search.openfoodfacts.org';
+
 /**
  * Búsqueda de productos por nombre (fallback cuando no hay código de barras).
- * Usa /api/v2/search: el endpoint legacy /cgi/search.pl quedó roto (Open Food Facts
- * lo está sustituyendo por su nuevo buscador "Search-a-licious").
+ * Usa "Search-a-licious" (search.openfoodfacts.org), el buscador de texto libre que reemplaza
+ * a los antiguos /cgi/search.pl (roto, da 503) y /api/v2/search (no admite texto libre, solo
+ * filtros por categoría/marca exactos).
  */
 export async function buscarPorNombre(query: string): Promise<Alimento[]> {
   const params = new URLSearchParams({
-    search_terms: query,
-    search_simple: '1',
-    action: 'process',
-    json: '1',
+    q: query,
     page_size: '20',
+    langs: 'es,en',
     fields: 'code,product_name,product_name_es,brands,nutriments',
   });
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}/api/v2/search?${params.toString()}`, { headers: HEADERS });
+    res = await fetch(`${SEARCH_URL}/search?${params.toString()}`, { headers: HEADERS });
   } catch {
     throw new BusquedaError('No se pudo conectar con Open Food Facts. Revisa tu conexión.');
   }
@@ -108,6 +109,9 @@ export async function buscarPorNombre(query: string): Promise<Alimento[]> {
     throw new BusquedaError('Open Food Facts no está respondiendo ahora mismo. Prueba a escanear o usa entrada manual.');
   }
   const json = await res.json();
-  const productos: OffProduct[] = json.products ?? [];
+  // La forma exacta de la respuesta de Search-a-licious (servicio nuevo, en evolución) no está
+  // fijada en un único formato documentado; se comprueban las variantes más probables.
+  const crudos: unknown[] = json.hits ?? json.products ?? json.results ?? [];
+  const productos: OffProduct[] = crudos.map((h) => (h as { _source?: OffProduct })._source ?? (h as OffProduct));
   return productos.map(alimentoDesdeProducto).filter((a): a is Alimento => a !== null);
 }
