@@ -92,26 +92,56 @@ const SEARCH_URL = 'https://search.openfoodfacts.org';
  * a los antiguos /cgi/search.pl (roto, da 503) y /api/v2/search (no admite texto libre, solo
  * filtros por categoría/marca exactos).
  */
-export async function buscarPorNombre(query: string): Promise<Alimento[]> {
+export interface ResultadoBusqueda {
+  alimentos: Alimento[];
+  /** Info técnica para diagnosticar cuando la búsqueda no devuelve nada; no es un error. */
+  debug?: string;
+}
+
+export async function buscarPorNombre(query: string): Promise<ResultadoBusqueda> {
   const params = new URLSearchParams({
     q: query,
     page_size: '20',
     langs: 'es,en',
     fields: 'code,product_name,product_name_es,brands,nutriments',
   });
+  const url = `${SEARCH_URL}/search?${params.toString()}`;
+
   let res: Response;
   try {
-    res = await fetch(`${SEARCH_URL}/search?${params.toString()}`, { headers: HEADERS });
-  } catch {
-    throw new BusquedaError('No se pudo conectar con Open Food Facts. Revisa tu conexión.');
+    res = await fetch(url, { headers: HEADERS });
+  } catch (e) {
+    const detalle = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    throw new BusquedaError(`No se pudo conectar con Open Food Facts (${detalle}).`);
   }
+
   if (!res.ok) {
-    throw new BusquedaError('Open Food Facts no está respondiendo ahora mismo. Prueba a escanear o usa entrada manual.');
+    let cuerpo = '';
+    try {
+      cuerpo = (await res.text()).slice(0, 200);
+    } catch {
+      // sin cuerpo legible
+    }
+    throw new BusquedaError(`Open Food Facts respondió con error ${res.status} ${res.statusText}. ${cuerpo}`.trim());
   }
-  const json = await res.json();
+
+  let json: any;
+  try {
+    json = await res.json();
+  } catch (e) {
+    throw new BusquedaError(`La respuesta de Open Food Facts no es JSON válido (${e instanceof Error ? e.message : e}).`);
+  }
+
   // La forma exacta de la respuesta de Search-a-licious (servicio nuevo, en evolución) no está
   // fijada en un único formato documentado; se comprueban las variantes más probables.
   const crudos: unknown[] = json.hits ?? json.products ?? json.results ?? [];
   const productos: OffProduct[] = crudos.map((h) => (h as { _source?: OffProduct })._source ?? (h as OffProduct));
-  return productos.map(alimentoDesdeProducto).filter((a): a is Alimento => a !== null);
+  const alimentos = productos.map(alimentoDesdeProducto).filter((a): a is Alimento => a !== null);
+
+  const debug =
+    alimentos.length === 0
+      ? `[debug] status=${res.status} claves_respuesta=${Object.keys(json).join(',') || '(vacío)'} crudos=${crudos.length}`
+      : undefined;
+
+  return { alimentos, debug };
 }

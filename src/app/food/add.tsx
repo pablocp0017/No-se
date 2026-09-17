@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useDailyLog } from '@/lib/hooks/useDailyLog';
+import { useFavoritos } from '@/lib/hooks/useFavoritos';
 import { buscarPorCodigoBarras, buscarPorNombre, BusquedaError } from '@/lib/openfoodfacts';
 import { formatearFechaLarga, hoyISO } from '@/lib/date';
 import { INGREDIENTES, componerAlimentoDesdeIngredientes, pesoTotalIngredientes, type IngredienteReferencia, type ItemIngrediente } from '@/lib/nutrition/ingredientes';
@@ -22,11 +24,15 @@ export default function AddFoodScreen() {
   const fecha = params.fecha ?? hoyISO();
   const colors = useThemeColors();
   const { registrarAlimento } = useDailyLog(fecha);
+  const { favoritos, guardarFavorito } = useFavoritos();
 
   const [paso, setPaso] = useState<Paso>('inicio');
+  const [favoritoGuardado, setFavoritoGuardado] = useState(false);
+  const [guardandoFavorito, setGuardandoFavorito] = useState(false);
   const [query, setQuery] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [resultados, setResultados] = useState<Alimento[]>([]);
+  const [debugBusqueda, setDebugBusqueda] = useState<string | null>(null);
   const [alimentoSeleccionado, setAlimentoSeleccionado] = useState<Alimento | null>(null);
   const [cantidadG, setCantidadG] = useState('100');
   const [guardando, setGuardando] = useState(false);
@@ -45,14 +51,20 @@ export default function AddFoodScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.codigoBarras]);
 
+  function irACantidad(alimento: Alimento, cantidad = '100') {
+    setAlimentoSeleccionado(alimento);
+    setCantidadG(cantidad);
+    setFavoritoGuardado(false);
+    setPaso('cantidad');
+  }
+
   async function lookupCodigoBarras(codigo: string) {
     setBuscando(true);
     setError(null);
     const alimento = await buscarPorCodigoBarras(codigo);
     setBuscando(false);
     if (alimento) {
-      setAlimentoSeleccionado(alimento);
-      setPaso('cantidad');
+      irACantidad(alimento);
     } else {
       setManual((m) => ({ ...m, nombre: '' }));
       setError('No encontramos ese producto. Añádelo manualmente.');
@@ -64,9 +76,11 @@ export default function AddFoodScreen() {
     if (!query.trim()) return;
     setBuscando(true);
     setError(null);
+    setDebugBusqueda(null);
     try {
-      const res = await buscarPorNombre(query.trim());
-      setResultados(res);
+      const { alimentos, debug } = await buscarPorNombre(query.trim());
+      setResultados(alimentos);
+      setDebugBusqueda(debug ?? null);
       setPaso('resultados');
     } catch (e) {
       setError(e instanceof BusquedaError ? e.message : 'No se pudo buscar. Inténtalo de nuevo.');
@@ -76,9 +90,7 @@ export default function AddFoodScreen() {
   }
 
   function seleccionar(alimento: Alimento) {
-    setAlimentoSeleccionado(alimento);
-    setCantidadG('100');
-    setPaso('cantidad');
+    irACantidad(alimento);
   }
 
   function confirmarManual() {
@@ -94,9 +106,7 @@ export default function AddFoodScreen() {
       fibraPor100g: manual.fibra ? Number(manual.fibra) : null,
       fuente: 'manual',
     };
-    setAlimentoSeleccionado(alimento);
-    setCantidadG('100');
-    setPaso('cantidad');
+    irACantidad(alimento);
   }
 
   function anadirIngrediente(ingrediente: IngredienteReferencia) {
@@ -114,14 +124,25 @@ export default function AddFoodScreen() {
 
   function confirmarIngredientes() {
     const alimento = componerAlimentoDesdeIngredientes(nombrePlato || 'Plato casero', itemsIngredientes);
-    setAlimentoSeleccionado(alimento);
-    setCantidadG(String(Math.round(pesoTotalIngredientes(itemsIngredientes))));
-    setPaso('cantidad');
+    irACantidad(alimento, String(Math.round(pesoTotalIngredientes(itemsIngredientes))));
   }
 
   const ingredientesFiltrados = buscarIngrediente.trim()
     ? INGREDIENTES.filter((i) => i.nombre.toLowerCase().includes(buscarIngrediente.trim().toLowerCase()))
     : [];
+
+  async function alternarFavorito() {
+    if (!alimentoSeleccionado) return;
+    setGuardandoFavorito(true);
+    setError(null);
+    const err = await guardarFavorito(alimentoSeleccionado);
+    setGuardandoFavorito(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setFavoritoGuardado(true);
+  }
 
   async function confirmarRegistro() {
     if (!alimentoSeleccionado) return;
@@ -175,6 +196,39 @@ export default function AddFoodScreen() {
           />
           <Button label="Entrada manual" variant="secondary" onPress={() => setPaso('manual')} />
           <Button label="Componer por ingredientes" variant="ghost" onPress={() => setPaso('ingredientes')} />
+
+          {favoritos.length > 0 ? (
+            <View style={{ gap: Spacing.space2, marginTop: Spacing.space2 }}>
+              <AppText variant="label" color="inkMuted">
+                ⭐ Guardados
+              </AppText>
+              {favoritos.map((fav) => (
+                <Pressable
+                  key={fav.id}
+                  onPress={() => irACantidad(fav.alimento)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: Spacing.space3,
+                    borderRadius: Radius.md,
+                    backgroundColor: colors.surface200,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <View style={{ flex: 1, paddingRight: Spacing.space3 }}>
+                    <AppText variant="bodyLg">{fav.alimento.nombre}</AppText>
+                    <AppText variant="bodySm" color="inkMuted">
+                      {fav.alimento.marca ? `${fav.alimento.marca} · ` : ''}
+                      {Math.round(fav.alimento.kcalPor100g)} kcal / 100 g
+                    </AppText>
+                  </View>
+                  <Ionicons name="star" size={18} color={colors.accent} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -251,9 +305,16 @@ export default function AddFoodScreen() {
       {paso === 'resultados' && (
         <View style={{ gap: Spacing.space2 }}>
           {resultados.length === 0 ? (
-            <AppText variant="body" color="inkMuted">
-              Sin resultados. Prueba con entrada manual.
-            </AppText>
+            <View style={{ gap: Spacing.space2 }}>
+              <AppText variant="body" color="inkMuted">
+                Sin resultados. Prueba con entrada manual.
+              </AppText>
+              {debugBusqueda ? (
+                <AppText variant="caption" color="inkMuted">
+                  {debugBusqueda}
+                </AppText>
+              ) : null}
+            </View>
           ) : (
             resultados.map((a, i) => (
               <Pressable
@@ -330,10 +391,21 @@ export default function AddFoodScreen() {
       {paso === 'cantidad' && alimentoSeleccionado && (
         <View style={{ gap: Spacing.space4 }}>
           <Card>
-            <AppText variant="h3">{alimentoSeleccionado.nombre}</AppText>
-            <AppText variant="bodySm" color="inkMuted">
-              {Math.round(alimentoSeleccionado.kcalPor100g)} kcal / 100 g
-            </AppText>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, paddingRight: Spacing.space3 }}>
+                <AppText variant="h3">{alimentoSeleccionado.nombre}</AppText>
+                <AppText variant="bodySm" color="inkMuted">
+                  {Math.round(alimentoSeleccionado.kcalPor100g)} kcal / 100 g
+                </AppText>
+              </View>
+              <Pressable onPress={alternarFavorito} disabled={guardandoFavorito || favoritoGuardado} hitSlop={8}>
+                <Ionicons
+                  name={favoritoGuardado ? 'star' : 'star-outline'}
+                  size={26}
+                  color={favoritoGuardado ? colors.accent : colors.inkMuted}
+                />
+              </Pressable>
+            </View>
           </Card>
           <TextField label="Cantidad (g)" keyboardType="decimal-pad" value={cantidadG} onChangeText={setCantidadG} />
           <AppText variant="body" color="inkMuted">

@@ -5,7 +5,7 @@ App móvil (React Native + Expo) para controlar la nutrición: registra comidas 
 ## Antes de arrancar
 
 1. **Crea un proyecto en [Supabase](https://supabase.com/dashboard)** (gratuito).
-2. En el **SQL Editor** de tu proyecto, ejecuta en orden el contenido de [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql) y luego [`supabase/migrations/0002_peso_objetivo.sql`](./supabase/migrations/0002_peso_objetivo.sql) — crea las tablas `profiles`, `weight_logs`, `foods` y `food_logs` con sus políticas de seguridad (RLS), y el campo de peso objetivo.
+2. En el **SQL Editor** de tu proyecto, ejecuta en orden el contenido de [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql), [`supabase/migrations/0002_peso_objetivo.sql`](./supabase/migrations/0002_peso_objetivo.sql) y [`supabase/migrations/0003_favoritos.sql`](./supabase/migrations/0003_favoritos.sql) — crea las tablas `profiles`, `weight_logs`, `foods`, `food_logs` y `food_favorites` con sus políticas de seguridad (RLS).
 3. Copia `.env.local.example` a `.env.local` y rellena `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` con los valores de **Project Settings → API Keys** de tu proyecto Supabase (usa la *Publishable key*).
 4. En **Authentication → Providers → Email**, activa **"Allow new users to sign up"** y, si no quieres verificación por correo durante las pruebas, desactiva **"Confirm email"**.
 
@@ -32,4 +32,6 @@ La identidad visual (colores, tipografía, componentes) vive en el Design System
 
 ## Próximos pasos sugeridos
 
-Este es un MVP funcional: cuestionario inicial (con peso objetivo), Menú Principal con navegación entre días, registro de comidas con escáner/búsqueda/entrada manual mostrando macros y micronutrientes por producto, y Datos Personales con evolución de peso, tiempo estimado al objetivo y una pantalla de desglose completo de vitaminas/minerales/aminoácidos/electrolitos. Quedan como siguiente fase: los aminoácidos casi nunca vienen en Open Food Facts (solo se rellenan si el producto los reporta, algo muy poco común), notificaciones de recordatorio de comidas, y editar/borrar un registro desde un menú explícito (hoy se borra con pulsación larga).
+Este es un MVP funcional: cuestionario inicial (con peso objetivo), Menú Principal con navegación entre días, registro de comidas con escáner/búsqueda/entrada manual/composición por ingredientes (~80 ingredientes con macros y micros conocidos) mostrando macros y micronutrientes por producto, alimentos guardados como favoritos (⭐) para reutilizar rápido, mover o eliminar un registro entre comidas, y Datos Personales con evolución de peso, tiempo estimado al objetivo y una pantalla de desglose completo de vitaminas/minerales/aminoácidos/electrolitos.
+
+La búsqueda por nombre depende de la API pública de Open Food Facts (`search.openfoodfacts.org`), que en el momento de escribir esto está migrando de sistema de búsqueda y puede fallar o dar 0 resultados de forma intermitente; si falla, el error mostrado incluye el detalle técnico (status HTTP o mensaje de red) para poder diagnosticarlo. El escáner de código de barras usa un endpoint distinto (`world.openfoodfacts.org/api/v2/product`) y no depende de esto.

@@ -3,26 +3,9 @@ import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { hoyISO } from '@/lib/date';
-import type { FoodLogRowConAlimento, FoodRow } from '@/types/database';
+import { filaAAlimento, asegurarFoodId } from '@/lib/foods';
+import type { FoodLogRowConAlimento } from '@/types/database';
 import type { Alimento, Comida, NutrientesConsumidos, RegistroComida } from '@/types/nutrition';
-
-function filaAAlimento(f: FoodRow): Alimento {
-  return {
-    id: f.id,
-    nombre: f.nombre,
-    marca: f.marca,
-    codigoBarras: f.codigo_barras,
-    kcalPor100g: f.kcal_100g,
-    proteinaPor100g: f.proteina_100g,
-    carbohidratosPor100g: f.carbohidratos_100g,
-    grasaPor100g: f.grasa_100g,
-    fibraPor100g: f.fibra_100g,
-    azucarPor100g: f.azucar_100g,
-    sodioMgPor100g: f.sodio_mg_100g,
-    micros: f.micros,
-    fuente: f.fuente,
-  };
-}
 
 export function useDailyLog(fecha: string = hoyISO()) {
   const { session } = useAuth();
@@ -74,39 +57,11 @@ export function useDailyLog(fecha: string = hoyISO()) {
   async function registrarAlimento(alimento: Alimento, cantidadG: number, comida: Comida) {
     if (!session) return 'No hay sesión activa';
 
-    let foodId: string | null = null;
-
-    if (alimento.codigoBarras) {
-      const { data: existente } = await supabase
-        .from('foods')
-        .select('id')
-        .eq('codigo_barras', alimento.codigoBarras)
-        .maybeSingle();
-      if (existente) foodId = existente.id;
-    }
-
-    if (!foodId) {
-      const { data: nuevo, error: errorInsert } = await supabase
-        .from('foods')
-        .insert({
-          codigo_barras: alimento.codigoBarras,
-          nombre: alimento.nombre,
-          marca: alimento.marca,
-          kcal_100g: alimento.kcalPor100g,
-          proteina_100g: alimento.proteinaPor100g,
-          carbohidratos_100g: alimento.carbohidratosPor100g,
-          grasa_100g: alimento.grasaPor100g,
-          fibra_100g: alimento.fibraPor100g,
-          azucar_100g: alimento.azucarPor100g,
-          sodio_mg_100g: alimento.sodioMgPor100g,
-          micros: alimento.micros,
-          fuente: alimento.fuente,
-          created_by: session.user.id,
-        })
-        .select('id')
-        .single();
-      if (errorInsert || !nuevo) return errorInsert?.message ?? 'No se pudo guardar el alimento';
-      foodId = nuevo.id;
+    let foodId: string;
+    try {
+      foodId = await asegurarFoodId(supabase, alimento, session.user.id);
+    } catch (e) {
+      return e instanceof Error ? e.message : 'No se pudo guardar el alimento';
     }
 
     const { error: errorLog } = await supabase.from('food_logs').insert({
