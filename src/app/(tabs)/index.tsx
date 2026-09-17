@@ -12,15 +12,14 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useProfile } from '@/lib/hooks/useProfile';
 import { useDailyLog } from '@/lib/hooks/useDailyLog';
 import { formatearFechaLarga, hoyISO } from '@/lib/date';
+import { COMIDAS } from '@/lib/nutrition/comidas';
 import type { Comida } from '@/types/nutrition';
-
-const COMIDAS: Comida[] = ['desayuno', 'almuerzo', 'cena', 'snacks'];
 
 export default function HomeScreen() {
   const colors = useThemeColors();
   const { macroTargets } = useProfile();
   const [fecha, setFecha] = useState(hoyISO());
-  const { porComida, consumido, eliminarRegistro } = useDailyLog(fecha);
+  const { porComida, consumido, eliminarRegistro, moverRegistro } = useDailyLog(fecha);
 
   const kcalObjetivo = macroTargets?.kcal ?? 0;
   const kcalRestantes = Math.round(kcalObjetivo - consumido.kcal);
@@ -62,6 +61,7 @@ export default function HomeScreen() {
             registros={porComida[comida]}
             onAnadir={() => abrirAnadir(comida)}
             onEliminarRegistro={eliminarRegistro}
+            onMoverRegistro={moverRegistro}
           />
         ))}
       </View>

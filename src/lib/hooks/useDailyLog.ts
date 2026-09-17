@@ -127,6 +127,12 @@ export function useDailyLog(fecha: string = hoyISO()) {
     await recargar();
   }
 
+  async function moverRegistro(id: string, nuevaComida: Comida) {
+    if (!session) return;
+    await supabase.from('food_logs').update({ comida: nuevaComida }).eq('id', id).eq('user_id', session.user.id);
+    await recargar();
+  }
+
   const porComida = useMemo(() => {
     const grupos: Record<Comida, RegistroComida[]> = { desayuno: [], almuerzo: [], cena: [], snacks: [] };
     for (const r of registros) grupos[r.comida].push(r);
@@ -161,5 +167,5 @@ export function useDailyLog(fecha: string = hoyISO()) {
     return total;
   }, [registros]);
 
-  return { registros, porComida, consumido, cargando, registrarAlimento, eliminarRegistro, recargar };
+  return { registros, porComida, consumido, cargando, registrarAlimento, eliminarRegistro, moverRegistro, recargar };
 }
