@@ -3,7 +3,8 @@ import type { Alimento } from '@/types/nutrition';
 const BASE_URL = 'https://world.openfoodfacts.org';
 
 // Open Food Facts pide identificar la app en el User-Agent para priorizar tráfico legítimo.
-const HEADERS = { 'User-Agent': 'NutriGoal - App nutrición - Version 1.0' };
+// Debe ser ASCII puro: Android rechaza cualquier carácter no-ASCII (tildes, ñ...) en cabeceras HTTP.
+const HEADERS = { 'User-Agent': 'NutriGoal - Nutrition Tracking App - Version 1.0' };
 
 interface OffProduct {
   code?: string;
