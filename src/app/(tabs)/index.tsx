@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/ui/Screen';
 import { AppText } from '@/components/ui/AppText';
 import { NutrientRing } from '@/components/nutrition/NutrientRing';
 import { MacroBar } from '@/components/nutrition/MacroBar';
 import { MealSectionCard } from '@/components/nutrition/MealSectionCard';
+import { WeekCalendar } from '@/components/nutrition/WeekCalendar';
 import { Spacing } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useProfile } from '@/lib/hooks/useProfile';
 import { useDailyLog } from '@/lib/hooks/useDailyLog';
-import { esHoy, formatearFechaLarga, hoyISO, sumarDias } from '@/lib/date';
+import { formatearFechaLarga, hoyISO } from '@/lib/date';
 import type { Comida } from '@/types/nutrition';
 
 const COMIDAS: Comida[] = ['desayuno', 'almuerzo', 'cena', 'snacks'];
@@ -32,16 +32,9 @@ export default function HomeScreen() {
 
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Pressable onPress={() => setFecha((f) => sumarDias(f, -1))} hitSlop={12}>
-          <Ionicons name="chevron-back" size={24} color={colors.ink} />
-        </Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <AppText variant="h1">{formatearFechaLarga(fecha)}</AppText>
-        </View>
-        <Pressable onPress={() => setFecha((f) => sumarDias(f, 1))} disabled={esHoy(fecha)} hitSlop={12}>
-          <Ionicons name="chevron-forward" size={24} color={esHoy(fecha) ? colors.border : colors.ink} />
-        </Pressable>
+      <View style={{ gap: Spacing.space3 }}>
+        <AppText variant="h1">{formatearFechaLarga(fecha)}</AppText>
+        <WeekCalendar fechaSeleccionada={fecha} onSeleccionar={setFecha} />
       </View>
 
       <View style={{ alignItems: 'center' }}>

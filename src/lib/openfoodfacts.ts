@@ -2,6 +2,9 @@ import type { Alimento } from '@/types/nutrition';
 
 const BASE_URL = 'https://world.openfoodfacts.org';
 
+// Open Food Facts pide identificar la app en el User-Agent para priorizar tráfico legítimo.
+const HEADERS = { 'User-Agent': 'NutriGoal - App nutrición - Version 1.0' };
+
 interface OffProduct {
   code?: string;
   product_name?: string;
@@ -72,14 +75,20 @@ function alimentoDesdeProducto(p: OffProduct): Alimento | null {
 
 /** Busca un producto por su código de barras (EAN-13/UPC) en Open Food Facts. */
 export async function buscarPorCodigoBarras(codigo: string): Promise<Alimento | null> {
-  const res = await fetch(`${BASE_URL}/api/v2/product/${encodeURIComponent(codigo)}.json`);
+  const res = await fetch(`${BASE_URL}/api/v2/product/${encodeURIComponent(codigo)}.json`, { headers: HEADERS });
   if (!res.ok) return null;
   const json = await res.json();
   if (json.status !== 1 || !json.product) return null;
   return alimentoDesdeProducto(json.product);
 }
 
-/** Búsqueda de productos por nombre (fallback cuando no hay código de barras). */
+export class BusquedaError extends Error {}
+
+/**
+ * Búsqueda de productos por nombre (fallback cuando no hay código de barras).
+ * Usa /api/v2/search: el endpoint legacy /cgi/search.pl quedó roto (Open Food Facts
+ * lo está sustituyendo por su nuevo buscador "Search-a-licious").
+ */
 export async function buscarPorNombre(query: string): Promise<Alimento[]> {
   const params = new URLSearchParams({
     search_terms: query,
@@ -89,8 +98,15 @@ export async function buscarPorNombre(query: string): Promise<Alimento[]> {
     page_size: '20',
     fields: 'code,product_name,product_name_es,brands,nutriments',
   });
-  const res = await fetch(`${BASE_URL}/cgi/search.pl?${params.toString()}`);
-  if (!res.ok) return [];
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/api/v2/search?${params.toString()}`, { headers: HEADERS });
+  } catch {
+    throw new BusquedaError('No se pudo conectar con Open Food Facts. Revisa tu conexión.');
+  }
+  if (!res.ok) {
+    throw new BusquedaError('Open Food Facts no está respondiendo ahora mismo. Prueba a escanear o usa entrada manual.');
+  }
   const json = await res.json();
   const productos: OffProduct[] = json.products ?? [];
   return productos.map(alimentoDesdeProducto).filter((a): a is Alimento => a !== null);

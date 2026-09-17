@@ -9,11 +9,12 @@ import { Card } from '@/components/ui/Card';
 import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useDailyLog } from '@/lib/hooks/useDailyLog';
-import { buscarPorCodigoBarras, buscarPorNombre } from '@/lib/openfoodfacts';
+import { buscarPorCodigoBarras, buscarPorNombre, BusquedaError } from '@/lib/openfoodfacts';
 import { formatearFechaLarga, hoyISO } from '@/lib/date';
+import { INGREDIENTES, componerAlimentoDesdeIngredientes, pesoTotalIngredientes, type IngredienteReferencia, type ItemIngrediente } from '@/lib/nutrition/ingredientes';
 import type { Alimento, Comida } from '@/types/nutrition';
 
-type Paso = 'inicio' | 'resultados' | 'cantidad' | 'manual';
+type Paso = 'inicio' | 'resultados' | 'cantidad' | 'manual' | 'ingredientes';
 
 export default function AddFoodScreen() {
   const params = useLocalSearchParams<{ comida: Comida; codigoBarras?: string; fecha?: string }>();
@@ -32,6 +33,10 @@ export default function AddFoodScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [manual, setManual] = useState({ nombre: '', kcal: '', proteina: '', carbohidratos: '', grasa: '', fibra: '' });
+
+  const [nombrePlato, setNombrePlato] = useState('');
+  const [buscarIngrediente, setBuscarIngrediente] = useState('');
+  const [itemsIngredientes, setItemsIngredientes] = useState<ItemIngrediente[]>([]);
 
   useEffect(() => {
     if (params.codigoBarras) {
@@ -58,10 +63,16 @@ export default function AddFoodScreen() {
   async function buscar() {
     if (!query.trim()) return;
     setBuscando(true);
-    const res = await buscarPorNombre(query.trim());
-    setResultados(res);
-    setBuscando(false);
-    setPaso('resultados');
+    setError(null);
+    try {
+      const res = await buscarPorNombre(query.trim());
+      setResultados(res);
+      setPaso('resultados');
+    } catch (e) {
+      setError(e instanceof BusquedaError ? e.message : 'No se pudo buscar. Inténtalo de nuevo.');
+    } finally {
+      setBuscando(false);
+    }
   }
 
   function seleccionar(alimento: Alimento) {
@@ -87,6 +98,30 @@ export default function AddFoodScreen() {
     setCantidadG('100');
     setPaso('cantidad');
   }
+
+  function anadirIngrediente(ingrediente: IngredienteReferencia) {
+    setItemsIngredientes((items) => [...items, { ingrediente, gramos: 100 }]);
+    setBuscarIngrediente('');
+  }
+
+  function actualizarGramosIngrediente(indice: number, gramos: number) {
+    setItemsIngredientes((items) => items.map((it, i) => (i === indice ? { ...it, gramos } : it)));
+  }
+
+  function quitarIngrediente(indice: number) {
+    setItemsIngredientes((items) => items.filter((_, i) => i !== indice));
+  }
+
+  function confirmarIngredientes() {
+    const alimento = componerAlimentoDesdeIngredientes(nombrePlato || 'Plato casero', itemsIngredientes);
+    setAlimentoSeleccionado(alimento);
+    setCantidadG(String(Math.round(pesoTotalIngredientes(itemsIngredientes))));
+    setPaso('cantidad');
+  }
+
+  const ingredientesFiltrados = buscarIngrediente.trim()
+    ? INGREDIENTES.filter((i) => i.nombre.toLowerCase().includes(buscarIngrediente.trim().toLowerCase()))
+    : [];
 
   async function confirmarRegistro() {
     if (!alimentoSeleccionado) return;
@@ -127,6 +162,11 @@ export default function AddFoodScreen() {
             onSubmitEditing={buscar}
             returnKeyType="search"
           />
+          {error ? (
+            <AppText variant="bodySm" color="danger">
+              {error}
+            </AppText>
+          ) : null}
           <Button label="Buscar" onPress={buscar} loading={buscando} />
           <Button
             label="Escanear código de barras"
@@ -134,6 +174,77 @@ export default function AddFoodScreen() {
             onPress={() => router.push({ pathname: '/food/scan', params: { comida, fecha } })}
           />
           <Button label="Entrada manual" variant="secondary" onPress={() => setPaso('manual')} />
+          <Button label="Componer por ingredientes" variant="ghost" onPress={() => setPaso('ingredientes')} />
+        </View>
+      )}
+
+      {paso === 'ingredientes' && (
+        <View style={{ gap: Spacing.space4 }}>
+          <AppText variant="body" color="inkMuted">
+            Para platos caseros sin código de barras: añade los ingredientes y sus cantidades, y estimamos las kcal,
+            macros y micronutrientes a partir de ellos.
+          </AppText>
+          <TextField label="Nombre del plato" value={nombrePlato} onChangeText={setNombrePlato} placeholder="Ej. Ensalada de pollo" />
+
+          <TextField
+            label="Añadir ingrediente"
+            value={buscarIngrediente}
+            onChangeText={setBuscarIngrediente}
+            placeholder="Ej. arroz, pollo, aceite..."
+          />
+          {ingredientesFiltrados.length > 0 ? (
+            <View style={{ gap: Spacing.space2 }}>
+              {ingredientesFiltrados.map((ing) => (
+                <Pressable
+                  key={ing.id}
+                  onPress={() => anadirIngrediente(ing)}
+                  style={{ padding: Spacing.space3, borderRadius: Radius.md, backgroundColor: colors.surface300 }}
+                >
+                  <AppText variant="body">{ing.nombre}</AppText>
+                  <AppText variant="caption" color="inkMuted">
+                    {ing.categoria} · {ing.por100g.kcal} kcal / 100 g
+                  </AppText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {itemsIngredientes.length > 0 ? (
+            <View style={{ gap: Spacing.space3 }}>
+              <AppText variant="label" color="inkMuted">
+                Ingredientes del plato
+              </AppText>
+              {itemsIngredientes.map((item, i) => (
+                <View key={`${item.ingrediente.id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.space3 }}>
+                  <AppText variant="body" style={{ flex: 1 }}>
+                    {item.ingrediente.nombre}
+                  </AppText>
+                  <View style={{ width: 90 }}>
+                    <TextField
+                      label=""
+                      keyboardType="decimal-pad"
+                      value={String(item.gramos)}
+                      onChangeText={(v) => actualizarGramosIngrediente(i, Number(v) || 0)}
+                    />
+                  </View>
+                  <AppText variant="bodySm" color="inkMuted">
+                    g
+                  </AppText>
+                  <Pressable onPress={() => quitarIngrediente(i)} hitSlop={8}>
+                    <AppText variant="body" color="danger">
+                      ×
+                    </AppText>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <Button
+            label="Continuar"
+            onPress={confirmarIngredientes}
+            disabled={itemsIngredientes.length === 0 || !nombrePlato.trim()}
+          />
         </View>
       )}
 
