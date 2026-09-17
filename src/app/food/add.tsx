@@ -10,15 +10,17 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useDailyLog } from '@/lib/hooks/useDailyLog';
 import { buscarPorCodigoBarras, buscarPorNombre } from '@/lib/openfoodfacts';
+import { formatearFechaLarga, hoyISO } from '@/lib/date';
 import type { Alimento, Comida } from '@/types/nutrition';
 
 type Paso = 'inicio' | 'resultados' | 'cantidad' | 'manual';
 
 export default function AddFoodScreen() {
-  const params = useLocalSearchParams<{ comida: Comida; codigoBarras?: string }>();
+  const params = useLocalSearchParams<{ comida: Comida; codigoBarras?: string; fecha?: string }>();
   const comida = params.comida ?? 'desayuno';
+  const fecha = params.fecha ?? hoyISO();
   const colors = useThemeColors();
-  const { registrarAlimento } = useDailyLog();
+  const { registrarAlimento } = useDailyLog(fecha);
 
   const [paso, setPaso] = useState<Paso>('inicio');
   const [query, setQuery] = useState('');
@@ -102,7 +104,12 @@ export default function AddFoodScreen() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <AppText variant="h1">Añadir alimento</AppText>
+        <View>
+          <AppText variant="h1">Añadir alimento</AppText>
+          <AppText variant="bodySm" color="inkMuted">
+            {formatearFechaLarga(fecha)}
+          </AppText>
+        </View>
         <Pressable onPress={() => router.back()}>
           <AppText variant="body" color="brand">
             Cerrar
@@ -121,7 +128,11 @@ export default function AddFoodScreen() {
             returnKeyType="search"
           />
           <Button label="Buscar" onPress={buscar} loading={buscando} />
-          <Button label="Escanear código de barras" variant="accent" onPress={() => router.push({ pathname: '/food/scan', params: { comida } })} />
+          <Button
+            label="Escanear código de barras"
+            variant="accent"
+            onPress={() => router.push({ pathname: '/food/scan', params: { comida, fecha } })}
+          />
           <Button label="Entrada manual" variant="secondary" onPress={() => setPaso('manual')} />
         </View>
       )}

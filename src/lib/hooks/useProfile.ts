@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import type { ProfileRow } from '@/types/database';
 import type { Perfil } from '@/types/nutrition';
 import { calcularMacroTargets } from '@/lib/nutrition/energy';
 import { construirMicronutrienteTargets } from '@/lib/nutrition/targets';
+import { estimarTiempoObjetivo } from '@/lib/nutrition/objetivo';
 
 function filaAPerfil(fila: ProfileRow): Perfil {
   return {
@@ -15,6 +17,7 @@ function filaAPerfil(fila: ProfileRow): Perfil {
     pesoKg: fila.peso_kg,
     objetivo: fila.objetivo,
     diasEjercicioSemana: fila.dias_ejercicio_semana,
+    pesoObjetivoKg: fila.peso_objetivo_kg,
   };
 }
 
@@ -25,6 +28,7 @@ export interface DatosOnboarding {
   pesoKg: number;
   objetivo: Perfil['objetivo'];
   diasEjercicioSemana: number;
+  pesoObjetivoKg?: number | null;
 }
 
 export function useProfile() {
@@ -56,6 +60,12 @@ export function useProfile() {
     recargar();
   }, [recargar]);
 
+  useFocusEffect(
+    useCallback(() => {
+      recargar();
+    }, [recargar])
+  );
+
   async function crearPerfil(datos: DatosOnboarding) {
     if (!session) return 'No hay sesión activa';
     const { error } = await supabase.from('profiles').insert({
@@ -66,6 +76,7 @@ export function useProfile() {
       peso_kg: datos.pesoKg,
       objetivo: datos.objetivo,
       dias_ejercicio_semana: datos.diasEjercicioSemana,
+      peso_objetivo_kg: datos.pesoObjetivoKg ?? datos.pesoKg,
     });
     if (error) return error.message;
     // Primer registro de peso para poder graficar la evolución desde el día 1.
@@ -83,6 +94,7 @@ export function useProfile() {
     if (cambios.pesoKg !== undefined) payload.peso_kg = cambios.pesoKg;
     if (cambios.objetivo !== undefined) payload.objetivo = cambios.objetivo;
     if (cambios.diasEjercicioSemana !== undefined) payload.dias_ejercicio_semana = cambios.diasEjercicioSemana;
+    if (cambios.pesoObjetivoKg !== undefined) payload.peso_objetivo_kg = cambios.pesoObjetivoKg;
 
     const { error } = await supabase.from('profiles').update(payload).eq('id', session.user.id);
     if (error) return error.message;
@@ -94,6 +106,7 @@ export function useProfile() {
     ? calcularMacroTargets(perfil.sexo, perfil.pesoKg, perfil.alturaCm, perfil.edad, perfil.objetivo, perfil.diasEjercicioSemana)
     : null;
   const micronutrienteTargets = perfil ? construirMicronutrienteTargets(perfil) : null;
+  const tiempoObjetivo = perfil ? estimarTiempoObjetivo(perfil) : null;
 
-  return { perfil, cargando, macroTargets, micronutrienteTargets, crearPerfil, actualizarPerfil, recargar };
+  return { perfil, cargando, macroTargets, micronutrienteTargets, tiempoObjetivo, crearPerfil, actualizarPerfil, recargar };
 }

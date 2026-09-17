@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
+import { hoyISO } from '@/lib/date';
 import type { FoodLogRowConAlimento, FoodRow } from '@/types/database';
 import type { Alimento, Comida, NutrientesConsumidos, RegistroComida } from '@/types/nutrition';
 
@@ -20,10 +22,6 @@ function filaAAlimento(f: FoodRow): Alimento {
     micros: f.micros,
     fuente: f.fuente,
   };
-}
-
-function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export function useDailyLog(fecha: string = hoyISO()) {
@@ -63,6 +61,14 @@ export function useDailyLog(fecha: string = hoyISO()) {
   useEffect(() => {
     recargar();
   }, [recargar]);
+
+  // Vuelve a cargar cada vez que la pantalla recupera el foco (p.ej. al volver de añadir un
+  // alimento), porque cada pantalla tiene su propia instancia de este hook y no comparten estado.
+  useFocusEffect(
+    useCallback(() => {
+      recargar();
+    }, [recargar])
+  );
 
   /** Inserta el alimento en `foods` si no existe (por código de barras) y registra la ingesta. */
   async function registrarAlimento(alimento: Alimento, cantidadG: number, comida: Comida) {

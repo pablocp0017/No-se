@@ -11,6 +11,7 @@ export interface ProfileRow {
   peso_kg: number;
   objetivo: Objetivo;
   dias_ejercicio_semana: number;
+  peso_objetivo_kg: number | null;
   created_at: string;
   updated_at: string;
 }

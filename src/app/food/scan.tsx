@@ -9,7 +9,7 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import type { Comida } from '@/types/nutrition';
 
 export default function ScanScreen() {
-  const params = useLocalSearchParams<{ comida: Comida }>();
+  const params = useLocalSearchParams<{ comida: Comida; fecha?: string }>();
   const colors = useThemeColors();
   const [permission, requestPermission] = useCameraPermissions();
   const yaEscaneado = useRef(false);
@@ -17,7 +17,10 @@ export default function ScanScreen() {
   function onBarcodeScanned(resultado: BarcodeScanningResult) {
     if (yaEscaneado.current) return;
     yaEscaneado.current = true;
-    router.replace({ pathname: '/food/add', params: { comida: params.comida, codigoBarras: resultado.data } });
+    router.replace({
+      pathname: '/food/add',
+      params: { comida: params.comida, fecha: params.fecha, codigoBarras: resultado.data },
+    });
   }
 
   if (!permission) {

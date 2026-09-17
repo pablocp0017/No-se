@@ -14,6 +14,7 @@ export interface Perfil {
   pesoKg: number;
   objetivo: Objetivo;
   diasEjercicioSemana: number;
+  pesoObjetivoKg: number | null;
 }
 
 export interface MacroTargets {

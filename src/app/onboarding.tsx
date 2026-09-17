@@ -11,7 +11,7 @@ import { useProfile } from '@/lib/hooks/useProfile';
 import type { Sexo } from '@/lib/nutrition/constants';
 import type { Objetivo } from '@/types/nutrition';
 
-const PASOS = ['sexo', 'medidas', 'objetivo', 'actividad', 'resumen'] as const;
+const PASOS = ['sexo', 'medidas', 'objetivo', 'pesoObjetivo', 'actividad', 'resumen'] as const;
 
 const OBJETIVOS: { valor: Objetivo; titulo: string; descripcion: string }[] = [
   { valor: 'perder_peso', titulo: 'Perder peso', descripcion: 'Déficit calórico moderado preservando masa muscular.' },
@@ -63,6 +63,7 @@ export default function OnboardingScreen() {
   const [alturaCm, setAlturaCm] = useState('');
   const [pesoKg, setPesoKg] = useState('');
   const [objetivo, setObjetivo] = useState<Objetivo | null>(null);
+  const [pesoObjetivoKg, setPesoObjetivoKg] = useState('');
   const [diasEjercicioSemana, setDiasEjercicioSemana] = useState<number | null>(null);
 
   const paso = PASOS[pasoIdx];
@@ -71,6 +72,7 @@ export default function OnboardingScreen() {
     if (paso === 'sexo') return sexo !== null;
     if (paso === 'medidas') return edad.trim() !== '' && alturaCm.trim() !== '' && pesoKg.trim() !== '';
     if (paso === 'objetivo') return objetivo !== null;
+    if (paso === 'pesoObjetivo') return objetivo === 'mantener' || pesoObjetivoKg.trim() !== '';
     if (paso === 'actividad') return diasEjercicioSemana !== null;
     return true;
   }
@@ -86,6 +88,7 @@ export default function OnboardingScreen() {
       pesoKg: Number(pesoKg),
       objetivo,
       diasEjercicioSemana,
+      pesoObjetivoKg: objetivo === 'mantener' ? Number(pesoKg) : Number(pesoObjetivoKg),
     });
     setGuardando(false);
     if (err) {
@@ -143,6 +146,34 @@ export default function OnboardingScreen() {
               onPress={() => setObjetivo(o.valor)}
             />
           ))}
+        </View>
+      )}
+
+      {paso === 'pesoObjetivo' && (
+        <View style={{ gap: Spacing.space4 }}>
+          {objetivo === 'mantener' ? (
+            <>
+              <AppText variant="h1">Tu objetivo es mantenerte</AppText>
+              <AppText variant="body" color="inkMuted">
+                Usaremos tu peso actual ({pesoKg || '—'} kg) como referencia. Podrás cambiarlo cuando quieras desde Datos
+                personales.
+              </AppText>
+            </>
+          ) : (
+            <>
+              <AppText variant="h1">¿Cuál es tu peso objetivo?</AppText>
+              <AppText variant="body" color="inkMuted">
+                Con esto calculamos cuánto tiempo te llevará aproximadamente alcanzarlo al ritmo actual.
+              </AppText>
+              <TextField
+                label="Peso objetivo (kg)"
+                keyboardType="decimal-pad"
+                value={pesoObjetivoKg}
+                onChangeText={setPesoObjetivoKg}
+                placeholder={objetivo === 'perder_peso' ? 'Ej. 65' : 'Ej. 78'}
+              />
+            </>
+          )}
         </View>
       )}
 

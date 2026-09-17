@@ -56,10 +56,21 @@ const ETIQUETAS_AMINOACIDOS: Record<string, string> = {
   valina: 'Valina',
 };
 
-function unidadDesdeClave(clave: string): string {
+export function unidadDesdeClave(clave: string): string {
   if (clave.endsWith('_ug')) return 'µg';
   if (clave.endsWith('_mg')) return 'mg';
   return 'mg';
+}
+
+/** Etiquetas legibles para cualquier clave de nutriente, usado para mostrar los micros que trae un alimento. */
+export const ETIQUETAS_NUTRIENTES: Record<string, string> = {
+  ...ETIQUETAS_VITAMINAS,
+  ...ETIQUETAS_MINERALES,
+  cloruro_mg: 'Cloruro',
+};
+
+export function etiquetaNutriente(clave: string): string {
+  return ETIQUETAS_NUTRIENTES[clave] ?? clave;
 }
 
 /**

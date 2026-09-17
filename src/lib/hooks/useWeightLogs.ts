@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import type { WeightLogRow } from '@/types/database';
@@ -34,6 +35,12 @@ export function useWeightLogs() {
   useEffect(() => {
     recargar();
   }, [recargar]);
+
+  useFocusEffect(
+    useCallback(() => {
+      recargar();
+    }, [recargar])
+  );
 
   async function registrarPeso(pesoKg: number) {
     if (!session) return 'No hay sesión activa';
