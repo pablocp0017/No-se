@@ -10,7 +10,12 @@
      MODEL_DEFAULT        modelo normal  (claude-sonnet-5-5)
      RATE_PER_MIN         peticiones por minuto y por IP (20)
      ALLOWED_ORIGIN       origen CORS permitido si la web se sirve desde otro dominio
-     ANTHROPIC_API_URL    URL base (para pruebas con un servidor simulado) */
+     ANTHROPIC_API_URL    URL base (para pruebas con un servidor simulado)
+   IA local gratuita con Ollama (https://ollama.com), sin clave:
+     ollama pull llama3.2 && ollama pull llama3.2-vision
+     node server/server.js            (si no hay ANTHROPIC_API_KEY, usa Ollama)
+     AI_PROVIDER=ollama|anthropic     fuerza uno u otro
+     OLLAMA_URL (http://localhost:11434)  OLLAMA_MODEL (llama3.2)  OLLAMA_VISION_MODEL (llama3.2-vision) */
 "use strict";
 const http = require("http"), fs = require("fs"), path = require("path");
 
@@ -18,6 +23,9 @@ const ROOT = path.resolve(__dirname, "..");
 const PORT = +process.env.PORT || 8000;
 const API = (process.env.ANTHROPIC_API_URL || "https://api.anthropic.com").replace(/\/$/, "");
 const MODELS = { quick: process.env.MODEL_QUICK || "claude-haiku-5-5", default: process.env.MODEL_DEFAULT || "claude-sonnet-5-5" };
+const OLLAMA = (process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2", OLLAMA_VISION = process.env.OLLAMA_VISION_MODEL || "llama3.2-vision";
+const PROVIDER = process.env.AI_PROVIDER || (process.env.ANTHROPIC_API_KEY ? "anthropic" : "ollama");
 const RATE = +process.env.RATE_PER_MIN || 20;
 const MAX_BODY = 8 * 1024 * 1024;           // 8 MB (fotos ya reducidas por el cliente)
 const MAX_MESSAGES = 20, MAX_TEXT = 12000, MAX_IMAGES = 4;
@@ -68,21 +76,43 @@ function buildPayload(b) {
   return body;
 }
 
+async function ollamaUp() { try { return (await fetch(OLLAMA + "/api/tags", { signal: AbortSignal.timeout(1500) })).ok; } catch (e) { return false; } }
+
+async function callAnthropic(payload) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw { status: 503, error: "sampling_disabled" };
+  const r = await fetch(API + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { console.error("Anthropic", r.status, j.error && j.error.message); throw { status: r.status === 429 ? 429 : 502, error: r.status === 429 ? "rate_limited" : "upstream_error" }; }
+  return (j.content || []).filter(c => c.type === "text").map(c => c.text).join("");
+}
+
+/* Convierte el payload (formato Anthropic) al de Ollama /api/chat. */
+async function callOllama(payload) {
+  let hasImg = false;
+  const messages = [];
+  if (payload.system) messages.push({ role: "system", content: payload.system });
+  for (const m of payload.messages) {
+    const text = m.content.filter(c => c.type === "text").map(c => c.text).join("\n"), images = m.content.filter(c => c.type === "image").map(c => c.source.data);
+    if (images.length) hasImg = true;
+    messages.push({ role: m.role, content: text, ...(images.length ? { images } : {}) });
+  }
+  let r;
+  try { r = await fetch(OLLAMA + "/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: hasImg ? OLLAMA_VISION : OLLAMA_MODEL, messages, stream: false, options: { temperature: .3 } }), signal: AbortSignal.timeout(180000) }); }
+  catch (e) { console.error("No se puede hablar con Ollama:", e.message); throw { status: 503, error: "sampling_disabled" }; }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { console.error("Ollama", r.status, j.error); throw { status: r.status === 404 ? 503 : 502, error: r.status === 404 ? "model_missing" : "upstream_error" }; }
+  return (j.message && j.message.content) || "";
+}
+
 async function handleAI(req, res) {
   const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
   if (limited(ip)) return send(res, 429, { error: "rate_limited" }, { "Retry-After": "30" });
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return send(res, 503, { error: "sampling_disabled", message: "Falta ANTHROPIC_API_KEY en el servidor." });
   let payload;
   try { payload = buildPayload(JSON.parse(await readBody(req))); }
   catch (e) { return send(res, e.code || 400, { error: e.err || "bad_request", message: e.msg || "Petición no válida." }); }
-  try {
-    const r = await fetch(API + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { console.error("Anthropic", r.status, j.error && j.error.message); return send(res, r.status === 429 ? 429 : 502, { error: r.status === 429 ? "rate_limited" : "upstream_error" }); }
-    const text = (j.content || []).filter(c => c.type === "text").map(c => c.text).join("");
-    send(res, 200, { text });
-  } catch (e) { console.error("Fallo de red con Anthropic:", e.message); send(res, 502, { error: "upstream_error" }); }
+  try { send(res, 200, { text: await (PROVIDER === "ollama" ? callOllama : callAnthropic)(payload) }); }
+  catch (e) { if (!e.status) console.error("Fallo de red con el proveedor de IA:", e.message); send(res, e.status || 502, { error: e.error || "upstream_error" }); }
 }
 
 function serveStatic(req, res) {
@@ -104,8 +134,8 @@ http.createServer((req, res) => {
   if (origin) { res.setHeader("Access-Control-Allow-Origin", origin); res.setHeader("Access-Control-Allow-Headers", "content-type"); res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS"); }
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, "http://x").pathname;
-  if (url === "/api/health" && req.method === "GET") return send(res, 200, { ok: true, ai: !!process.env.ANTHROPIC_API_KEY, images: true });
+  if (url === "/api/health" && req.method === "GET") return (async () => send(res, 200, { ok: true, provider: PROVIDER, ai: PROVIDER === "ollama" ? await ollamaUp() : !!process.env.ANTHROPIC_API_KEY, images: true }))();
   if (url === "/api/ai" && req.method === "POST") return handleAI(req, res);
   if (req.method === "GET" || req.method === "HEAD") return serveStatic(req, res);
   res.writeHead(405); res.end();
-}).listen(PORT, () => console.log(`NutriDiario en http://localhost:${PORT}  (IA: ${process.env.ANTHROPIC_API_KEY ? "activada" : "desactivada, falta ANTHROPIC_API_KEY"})`));
+}).listen(PORT, () => console.log(`NutriDiario en http://localhost:${PORT}  (IA: ${PROVIDER === "ollama" ? "Ollama local, modelos " + OLLAMA_MODEL + " / " + OLLAMA_VISION : process.env.ANTHROPIC_API_KEY ? "Anthropic" : "desactivada, falta ANTHROPIC_API_KEY"})`));

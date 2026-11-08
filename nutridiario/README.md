@@ -47,6 +47,17 @@ Hay dos modos, con la misma interfaz interna (`SAMPLE(input, opts)` y `SAMPLE.js
 - **Dentro de claude.ai**: la página recibe `window.claude` y la IA funciona con la cuenta de quien la abre.
 - **Servidor propio**: `node server/server.js` sirve la web y expone `POST /api/ai` y `GET /api/health`. La clave `ANTHROPIC_API_KEY` solo vive en el servidor, nunca en el navegador. El cliente detecta `/api/health` y activa la IA; si no hay clave, oculta esas funciones y avisa.
 
+### IA local y gratuita con Ollama
+
+Sin clave de pago y sin salir de tu ordenador:
+
+```bash
+ollama pull llama3.2 && ollama pull llama3.2-vision
+node server/server.js
+```
+
+Si no hay `ANTHROPIC_API_KEY`, el servidor usa Ollama (`AI_PROVIDER=ollama|anthropic` lo fuerza). Variables: `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_VISION_MODEL`. Los modelos locales son menos precisos que Claude, sobre todo con fotos y en JSON: revisa siempre los valores.
+
 Si no hay ni `window.claude` ni servidor, la IA se desactiva y todo lo manual sigue funcionando.
 
 Variables del servidor: `PORT` (8000), `MODEL_QUICK` (`claude-haiku-5-5`), `MODEL_DEFAULT` (`claude-sonnet-5-5`), `RATE_PER_MIN` (20 por IP), `ALLOWED_ORIGIN` (CORS, si la web está en otro dominio; en ese caso define `window.NUTRI_API = "https://tu-servidor"` antes de cargar `js/ai.js`).
